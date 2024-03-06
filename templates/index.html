@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chess Game</title>
+    <style>
+        .chessboard {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            border: 2px solid #333;
+        }
+        button {
+            display: block;
+            margin: 20px auto;
+        }
+	#turn {
+            text-align: center;
+            font-size: 20px;
+            margin-top: 10px;
+    </style>
+</head>
+<body>
+    <div id="board" class="chessboard">{{ board|safe }}</div>
+	<div id="turn">Turn: {{ turn }}</div>
+    <input type="text" id="move" placeholder="e2e4" style="display: block; margin: 10px auto;">
+    <button onclick="submitMove()">Make Move</button>
+    <button onclick="resetBoard()">Reset Board</button>
+	<button onclick="getAIMove()">Get AI Move</button>
+    <script>
+        function submitMove() {
+            const move = document.getElementById('move').value;
+            fetch('/move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ move: move }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('board').innerHTML = data.board;
+                    document.getElementById('move').value = ''; // Clear the input after successful move
+		document.getElementById('turn').textContent = 'Turn: ' + data.turn;
+		if (data.game_over) {
+    			alert("Game over!");
+    // Optionally, disable move submission here or offer to reset the board
+}
+
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => console.error('Error making move:', error));
+        }
+
+        function resetBoard() {
+            fetch('/reset')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('board').innerHTML = data.board;
+			document.getElementById('turn').textContent = 'Turn: ' + data.turn;
+                })
+                .catch(error => console.error('Error resetting board:', error));
+        }
+	function getAIMove() {
+            fetch('/ai_move')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('board').innerHTML = data.board;
+			document.getElementById('turn').textContent = 'Turn: ' + data.turn;
+                    } else {
+                        alert(data.message);
+                    }
+                })
+                .catch(error => console.error('Error getting AI move:', error));
+        }
+    </script>
+</body>
+</html>
+
