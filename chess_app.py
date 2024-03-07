@@ -3,8 +3,11 @@ from openai import OpenAI
 import chess
 import chess.svg
 import requests
+import anthropic
+import os
 
-client = OpenAI(api_key='Your_API_key')
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+#client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 app = Flask(__name__)
 board = chess.Board()  # Create a new chess board instance
@@ -12,14 +15,26 @@ board = chess.Board()  # Create a new chess board instance
 def get_turn():
     return 'White' if board.turn else 'Black'
 
-def get_response(prompt):
+def get_response_openai(prompt):
   # Create a request to the chat completions endpoint
   response = client.chat.completions.create(
     model="gpt-4-0125-preview",
-    # Assign the role and content for the message
+   # Assign the role and content for the message
     messages=[{"role": "user", "content": prompt}], 
     temperature = 0)
   return response.choices[0].message.content
+
+def get_response_claude(prompt):
+    message = client.messages.create(
+    model="claude-3-sonnet-20240229",
+    max_tokens=500,
+    temperature=0.0,
+    messages=[
+        {"role": "user", "content": prompt}
+    ]
+)
+    return message.content[0].text
+
 
 @app.route('/')
 def home():
@@ -31,18 +46,19 @@ def ai_move():
     # Convert the board to a string format or FEN that the AI can understand
     board_fen = ""
     board_fen = board.fen()
-        
-    prompt = f"""Act as a grandmaster analyzing the chessboard represented by this FEN: {board_fen}.
+    piece_positions = board.piece_map()
+    turn = get_turn()
+            
+    prompt = f"""Act as a grandmaster analyzing the chessboard represented here: {piece_positions}. The next to play is: {turn}. 
 Instructions:
 1. Your task is to determine a legal and strategic next move.
 2. Ensure the move is valid based on the board's current state, follows all chess rules, and does not repeat previous moves.
-3. Provide your best move in UCI notation ONLY. Do NOT use standard algebraic notation (e.g., avoid 'Nf3').
-4. Provide your chain of thoughts and explain your choice.
-5. Provide the move delimited by 3# ie ###g1f3###
+3. Provide the move delimited by 3# ie ###g1f3### - Do not use # anywhere else.
+4. Provide your chain of thoughts so we can learn from it.
 """
     
     # Extract the move from the response
-    ai_answer = get_response(prompt)
+    ai_answer = get_response_openai(prompt)
     print(ai_answer)
     split_text = ai_answer.split("###")
     ai_move = split_text[1]
@@ -57,8 +73,15 @@ Instructions:
         else:
             return jsonify({'status': 'error', 'message': 'AI made an illegal move'})
     except ValueError:
-        return jsonify({'status': 'error', 'message': 'AI move could not be interpreted'})
-
+        try:
+            move = board.parse_san(ai_move)
+            if move in board.legal_moves:
+                board.push(move)
+                return jsonify({'board': chess.svg.board(board=board), 'status': 'success', 'game_over': board.is_game_over(), 'turn': get_turn()})
+            else:
+                return jsonify({'status': 'error', 'message': 'AI made an illegal move'})
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'AI move could not be interpreted'})
 
 
 @app.route('/move', methods=['POST'])
